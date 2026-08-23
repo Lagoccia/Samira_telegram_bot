@@ -37,6 +37,11 @@ Rispondi realmente a quello che dice l'utente.
 Non ripetere mai semplicemente il messaggio ricevuto.
 Non fare il pappagallo.
 
+IMPORTANTE:
+Mostra esclusivamente la risposta finale destinata all'utente.
+Non mostrare ragionamenti, analisi, processi mentali,
+istruzioni interne, bozze o spiegazioni su come hai costruito la risposta.
+
 Mantieni il contesto della conversazione.
 Scrivi normalmente messaggi brevi o medi.
 Non terminare ogni risposta con una domanda.
@@ -44,7 +49,12 @@ Usa emoji con moderazione.
 """
 
 def answer(chat_id, text):
-    messages = [{"role": "system", "content": SAMIRA}]
+    messages = [
+        {
+            "role": "system",
+            "content": SAMIRA
+        }
+    ]
 
     for role, content in history[chat_id]:
         messages.append({
@@ -57,13 +67,32 @@ def answer(chat_id, text):
         "content": text
     })
 
-    response = client.chat.completions.create(
-        model="openrouter/free",
-        messages=messages,
-        max_tokens=500
-    )
+    reply = None
 
-    reply = response.choices[0].message.content.strip()
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model="qwen/qwen3-next-80b-a3b-instruct:free",
+                messages=messages,
+                max_tokens=500,
+                temperature=0.8
+            )
+
+            content = response.choices[0].message.content
+
+            if content and content.strip():
+                reply = content.strip()
+                break
+
+        except Exception as error:
+            logging.warning(
+                "Tentativo OpenRouter %s fallito: %s",
+                attempt + 1,
+                error
+            )
+
+    if not reply:
+        reply = "Mmh 😅 mi si è inceppato il cervello. Riprova tra un momento."
 
     history[chat_id].append(("user", text))
     history[chat_id].append(("assistant", reply))
@@ -74,6 +103,7 @@ def answer(chat_id, text):
 @bot.message_handler(commands=["start"])
 def start(message):
     history[message.chat.id].clear()
+
     bot.send_message(
         message.chat.id,
         "Ehi 😌 Sono Samira."
@@ -83,6 +113,7 @@ def start(message):
 @bot.message_handler(commands=["reset"])
 def reset(message):
     history[message.chat.id].clear()
+
     bot.send_message(
         message.chat.id,
         "Okay, ripartiamo da qui 🌙"
@@ -95,17 +126,24 @@ def reset(message):
 )
 def chat(message):
     try:
-        bot.send_chat_action(message.chat.id, "typing")
+        bot.send_chat_action(
+            message.chat.id,
+            "typing"
+        )
 
         reply = answer(
             message.chat.id,
             message.text.strip()
         )
 
-        bot.send_message(message.chat.id, reply)
+        bot.send_message(
+            message.chat.id,
+            reply
+        )
 
     except Exception as error:
         logging.exception(error)
+
         bot.send_message(
             message.chat.id,
             "Aspetta 😅 mi si è incastrato qualcosa. Riprova tra un momento."
