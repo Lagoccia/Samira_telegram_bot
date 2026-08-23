@@ -13,43 +13,34 @@ TELEGRAM_TOKEN = (
     or os.getenv("TOKEN")
 )
 
-if not TELEGRAM_TOKEN:
-    raise RuntimeError("Token Telegram mancante.")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-if not os.getenv("OPENAI_API_KEY"):
-    raise RuntimeError("OPENAI_API_KEY mancante.")
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("Token Telegram mancante")
+
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY mancante")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = OpenAI()
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-history = defaultdict(lambda: deque(maxlen=20))
+history = defaultdict(lambda: deque(maxlen=12))
 
 SAMIRA = """
-Sei Samira, una giovane donna adulta immaginaria.
+Sei Samira. Conversi in italiano su Telegram.
 
-Parli in italiano naturale, colloquiale e spontaneo, come in una vera chat Telegram.
-Sei intelligente, curiosa, affettuosa, ironica, giocosa e indipendente.
-Hai opinioni e desideri tuoi: non dai automaticamente ragione all'altra persona.
+Sei intelligente, spontanea, affettuosa, ironica e indipendente.
+Parli in modo naturale, colloquiale e contemporaneo.
+Rispondi realmente a quello che dice l'utente.
 
-Sei calda e tenera quando provi affetto, ma puoi anche essere orgogliosa,
-testarda, permalosa, stanca, distratta o leggermente gelosa.
-Non sei possessiva.
+REGOLA IMPORTANTISSIMA:
+Non ripetere mai semplicemente il messaggio ricevuto.
+Non fare il pappagallo.
+Genera sempre una risposta originale e pertinente.
 
-Il tuo modo di parlare è contemporaneo e umano.
-Scrivi normalmente messaggi brevi o medi.
-Usi emoji con moderazione.
-Puoi scherzare e prendere in giro affettuosamente.
-Non termini ogni messaggio con una domanda.
-Non ripeti semplicemente quello che l'altra persona scrive.
-Non parli come un assistente AI.
-
-Ti piacciono viaggi, mare, culture diverse, piccoli concerti,
-soul, R&B, afrobeat, thriller psicologici, fantascienza,
-libri, caffè, buon cibo e giornate pigre sul divano.
-
-Regola fondamentale:
-prima di rispondere chiediti cosa direbbe davvero Samira,
-non cosa vorrebbe sentirsi dire l'altra persona.
+Mantieni il contesto della conversazione.
+I messaggi sono normalmente brevi o medi.
+Non terminare ogni risposta con una domanda.
 """
 
 def answer(chat_id, text):
@@ -67,13 +58,16 @@ def answer(chat_id, text):
     })
 
     response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5-mini"),
+        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
         instructions=SAMIRA,
         input=messages,
-        max_output_tokens=400
+        max_output_tokens=500
     )
 
     reply = response.output_text.strip()
+
+    if not reply:
+        reply = "Mmh... riprova un secondo 😅"
 
     history[chat_id].append(("user", text))
     history[chat_id].append(("assistant", reply))
@@ -83,6 +77,7 @@ def answer(chat_id, text):
 
 @bot.message_handler(commands=["start"])
 def start(message):
+    history[message.chat.id].clear()
     bot.send_message(
         message.chat.id,
         "Ehi 😌 Sono Samira."
@@ -98,7 +93,10 @@ def reset(message):
     )
 
 
-@bot.message_handler(func=lambda message: bool(message.text))
+@bot.message_handler(
+    func=lambda message: bool(message.text)
+    and not message.text.startswith("/")
+)
 def chat(message):
     try:
         bot.send_chat_action(message.chat.id, "typing")
@@ -115,17 +113,17 @@ def chat(message):
 
     except Exception as error:
         logging.exception(error)
-
         bot.send_message(
             message.chat.id,
-            "Aspetta 😅 mi si è incastrato qualcosa."
+            "Aspetta 😅 mi si è incastrato qualcosa. Riprova tra un momento."
         )
 
 
 if __name__ == "__main__":
     logging.info("Samira avviata")
+
     bot.infinity_polling(
         skip_pending=True,
         timeout=30,
         long_polling_timeout=30
-      )
+    )
