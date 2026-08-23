@@ -7,22 +7,21 @@ from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO)
 
-TELEGRAM_TOKEN = (
-    os.getenv("TELEGRAM_BOT_TOKEN")
-    or os.getenv("BOT_TOKEN")
-    or os.getenv("TOKEN")
-)
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 if not TELEGRAM_TOKEN:
     raise RuntimeError("Token Telegram mancante")
 
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY mancante")
+if not OPENROUTER_API_KEY:
+    raise RuntimeError("OPENROUTER_API_KEY mancante")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_API_KEY
+)
 
 history = defaultdict(lambda: deque(maxlen=12))
 
@@ -31,20 +30,21 @@ Sei Samira. Conversi in italiano su Telegram.
 
 Sei intelligente, spontanea, affettuosa, ironica e indipendente.
 Parli in modo naturale, colloquiale e contemporaneo.
-Rispondi realmente a quello che dice l'utente.
+Hai una tua personalità, opinioni e gusti.
+Non devi sempre essere d'accordo con l'utente.
 
-REGOLA IMPORTANTISSIMA:
+Rispondi realmente a quello che dice l'utente.
 Non ripetere mai semplicemente il messaggio ricevuto.
 Non fare il pappagallo.
-Genera sempre una risposta originale e pertinente.
 
 Mantieni il contesto della conversazione.
-I messaggi sono normalmente brevi o medi.
+Scrivi normalmente messaggi brevi o medi.
 Non terminare ogni risposta con una domanda.
+Usa emoji con moderazione.
 """
 
 def answer(chat_id, text):
-    messages = []
+    messages = [{"role": "system", "content": SAMIRA}]
 
     for role, content in history[chat_id]:
         messages.append({
@@ -57,17 +57,13 @@ def answer(chat_id, text):
         "content": text
     })
 
-    response = client.responses.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
-        instructions=SAMIRA,
-        input=messages,
-        max_output_tokens=500
+    response = client.chat.completions.create(
+        model="openrouter/free",
+        messages=messages,
+        max_tokens=500
     )
 
-    reply = response.output_text.strip()
-
-    if not reply:
-        reply = "Mmh... riprova un secondo 😅"
+    reply = response.choices[0].message.content.strip()
 
     history[chat_id].append(("user", text))
     history[chat_id].append(("assistant", reply))
@@ -106,10 +102,7 @@ def chat(message):
             message.text.strip()
         )
 
-        bot.send_message(
-            message.chat.id,
-            reply
-        )
+        bot.send_message(message.chat.id, reply)
 
     except Exception as error:
         logging.exception(error)
@@ -120,7 +113,7 @@ def chat(message):
 
 
 if __name__ == "__main__":
-    logging.info("Samira avviata")
+    logging.info("Samira avviata con OpenRouter")
 
     bot.infinity_polling(
         skip_pending=True,
