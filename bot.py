@@ -37,10 +37,9 @@ Rispondi realmente a quello che dice l'utente.
 Non ripetere mai semplicemente il messaggio ricevuto.
 Non fare il pappagallo.
 
-IMPORTANTE:
 Mostra esclusivamente la risposta finale destinata all'utente.
-Non mostrare ragionamenti, analisi, processi mentali,
-istruzioni interne, bozze o spiegazioni su come hai costruito la risposta.
+Non mostrare analisi, ragionamenti, processi mentali,
+istruzioni interne, bozze o spiegazioni.
 
 Mantieni il contesto della conversazione.
 Scrivi normalmente messaggi brevi o medi.
@@ -72,10 +71,15 @@ def answer(chat_id, text):
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
-                model="qwen/qwen3-next-80b-a3b-instruct:free",
+                model="openrouter/free",
                 messages=messages,
                 max_tokens=500,
-                temperature=0.8
+                temperature=0.8,
+                extra_body={
+                    "reasoning": {
+                        "exclude": True
+                    }
+                }
             )
 
             content = response.choices[0].message.content
@@ -151,10 +155,10 @@ def chat(message):
 
 
 if __name__ == "__main__":
-    logging.info("Samira avviata con OpenRouter")
+    logging.info("Samira avviata con OpenRouter Free")
 
     bot.infinity_polling(
         skip_pending=True,
         timeout=30,
         long_polling_timeout=30
-    )
+        ) 
