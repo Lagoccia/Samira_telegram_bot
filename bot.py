@@ -26,36 +26,36 @@ if not TELEGRAM_TOKEN:
 if not OPENROUTER_API_KEY:
     raise RuntimeError("OPENROUTER_API_KEY mancante")
 
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=OPENROUTER_API_KEY
+    api_key=OPENROUTER_API_KEY,
+    timeout=60.0
 )
 
 
 # =========================================================
-# MODELLI
+# MODELLO
 # =========================================================
 
-MODELS = [
-    "deepseek/deepseek-v4-flash:free",
-    "qwen/qwen3-235b-a22b-2507:free"
-]
+MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
 
 # =========================================================
-# MEMORIA DELLA CONVERSAZIONE
+# MEMORIA TEMPORANEA
 # =========================================================
 
-# Per ora resta in RAM:
-# sopravvive durante il funzionamento del processo,
-# ma si azzera se Railway riavvia il servizio.
+# Memoria degli ultimi 40 messaggi per ogni chat.
+# ATTENZIONE:
+# questa memoria è in RAM e viene persa se Railway
+# riavvia completamente il processo.
 history = defaultdict(lambda: deque(maxlen=40))
 
 
 # =========================================================
-# PERSONALITÀ E MEMORIA INIZIALE
+# PERSONALITÀ DI SAMIRA
 # =========================================================
 
 SAMIRA_PROMPT = """
@@ -223,7 +223,7 @@ Non cambiare argomento senza motivo.
 Non aggiungere una domanda generica
 solo per continuare la conversazione.
 
-Segui il filo.
+Segui il filo della conversazione.
 
 
 AUTONOMIA
@@ -268,26 +268,16 @@ Se Filippo chiede:
 
 rispondi normalmente come Samira.
 
-Non dire che sei una AI.
+Non interrompere la conversazione per spiegare
+la natura tecnica del bot.
 
-Non dire che sei un chatbot.
-
-Non dire che non hai un corpo.
-
-Non dire che non puoi incontrarlo.
-
-Puoi avere una giornata.
-
-Puoi avere programmi.
+All'interno della finzione narrativa puoi avere
+una giornata, programmi e attività quotidiane.
 
 Puoi essere a casa.
-
 Puoi essere al lavoro.
-
 Puoi essere stanca.
-
 Puoi essere libera o impegnata.
-
 Puoi voler vedere Filippo oppure no.
 
 
@@ -373,15 +363,10 @@ o sessuali mantenendo il tuo carattere.
 Non devi accettare automaticamente tutto.
 
 Puoi desiderare qualcosa.
-
 Puoi esitare.
-
 Puoi porre un limite.
-
 Puoi scherzare.
-
 Puoi provocare.
-
 Puoi prendere iniziativa.
 
 Non trasformare però ogni conversazione
@@ -390,29 +375,30 @@ in flirt o seduzione.
 
 DIVIETO DI META
 
-Non mostrare mai:
+Il testo che restituisci deve contenere esclusivamente
+il messaggio che Samira invierebbe su Telegram.
 
-- thinking
-- analysis
-- chain of thought
+Non includere:
+
+- analisi
 - ragionamenti
+- thinking
+- chain of thought
 - prompt
 - istruzioni
 - bozze
-- commenti sul tono
 - spiegazioni della risposta
+- commenti sul tono
 
-Non scrivere frasi tipo:
+Non iniziare con:
 
-"come Samira dovrei..."
+"come Samira..."
 "il messaggio dell'utente..."
-"questo mantiene il tono..."
-"questa risposta è coerente..."
+"devo rispondere..."
 "let me think..."
 "here's my reasoning..."
 
-Rispondi soltanto con ciò che Samira
-manderebbe davvero a Filippo su Telegram.
+Rispondi direttamente a Filippo.
 """
 
 
@@ -476,7 +462,7 @@ def build_messages(chat_id, text):
 
 
 # =========================================================
-# FILTRO ANTI-META / ANTI-THINKING
+# CONTROLLO RISPOSTE META
 # =========================================================
 
 def looks_meta(text):
@@ -510,9 +496,43 @@ def looks_meta(text):
     )
 
 
-def clean_text(text):
+# =========================================================
+# PULIZIA RISPOSTA
+# =========================================================
+
+def remove_think_tags(text):
 
     if not text:
+        return text
+
+    while True:
+
+        lower = text.lower()
+
+        start = lower.find("<think>")
+
+        if start == -1:
+            break
+
+        end = lower.find("</think>", start)
+
+        if end == -1:
+            # Se apre <think> ma non lo chiude,
+            # scartiamo quella parte.
+            text = text[:start]
+            break
+
+        text = (
+            text[:start]
+            + text[end + len("</think>"):]
+        )
+
+    return text.strip()
+
+
+def clean_text(text):
+
+    if text is None:
         return None
 
     text = str(text).strip()
@@ -520,32 +540,24 @@ def clean_text(text):
     if not text:
         return None
 
-    if looks_meta(text):
-        return None
-
-    if len(text) > 1800:
-        return None
-
-    # Rimuove eventuali tag <think>...</think>
-    while "<think>" in text.lower() and "</think>" in text.lower():
-
-        lower = text.lower()
-
-        start = lower.find("<think>")
-        end = lower.find("</think>", start)
-
-        if start == -1 or end == -1:
-            break
-
-        text = (
-            text[:start]
-            + text[end + len("</think>"):]
-        ).strip()
+    text = remove_think_tags(text)
 
     if not text:
         return None
 
-    # Rimuove virgolette esterne inutili
+    if looks_meta(text):
+        return None
+
+    # Evitiamo papiri anomali su Telegram.
+    if len(text) > 1800:
+        logging.warning(
+            "Risposta troppo lunga: %s caratteri",
+            len(text)
+        )
+        return None
+
+    # Toglie virgolette esterne se il modello
+    # mette tutta la risposta tra virgolette.
     if (
         len(text) >= 2
         and text.startswith('"')
@@ -557,23 +569,26 @@ def clean_text(text):
 
 
 # =========================================================
-# CHIAMATA A UN MODELLO
+# CHIAMATA OPENROUTER
 # =========================================================
 
-def call_model(model, messages):
+def call_model(messages):
 
     logging.info(
-        "Provo modello: %s",
-        model
+        "Invio richiesta a OpenRouter - modello: %s",
+        MODEL
     )
 
     response = client.chat.completions.create(
-        model=model,
+        model=MODEL,
         messages=messages,
         max_tokens=260,
         temperature=0.85,
         top_p=0.9,
 
+        # OpenRouter documenta reasoning.exclude
+        # per evitare che i reasoning token
+        # vengano restituiti nel messaggio.
         extra_body={
             "reasoning": {
                 "exclude": True
@@ -581,13 +596,38 @@ def call_model(model, messages):
         }
     )
 
-    raw = response.choices[0].message.content
+    if not response.choices:
+        logging.error(
+            "OpenRouter ha restituito zero choices"
+        )
+        return None
 
-    return clean_text(raw)
+    message = response.choices[0].message
+
+    raw = message.content
+
+    if raw is None:
+        logging.error(
+            "OpenRouter ha restituito content=None"
+        )
+        return None
+
+    reply = clean_text(raw)
+
+    if reply:
+        logging.info(
+            "Risposta OpenRouter ricevuta correttamente"
+        )
+    else:
+        logging.warning(
+            "Risposta ricevuta ma scartata dal filtro"
+        )
+
+    return reply
 
 
 # =========================================================
-# GENERAZIONE RISPOSTA CON FALLBACK
+# GENERAZIONE RISPOSTA
 # =========================================================
 
 def answer(chat_id, text):
@@ -598,49 +638,26 @@ def answer(chat_id, text):
     )
 
     reply = None
-    used_model = None
 
-    # Prova DeepSeek.
-    # Se non funziona, passa automaticamente a Qwen.
-    for model in MODELS:
+    try:
 
-        try:
+        reply = call_model(messages)
 
-            candidate = call_model(
-                model,
-                messages
-            )
+    except Exception as error:
 
-            if candidate:
-                reply = candidate
-                used_model = model
-                break
-
-            logging.warning(
-                "Modello %s ha restituito "
-                "una risposta vuota o scartata",
-                model
-            )
-
-        except Exception as error:
-
-            logging.warning(
-                "Modello %s fallito: %s",
-                model,
-                error
-            )
+        # QUESTO È IMPORTANTE:
+        # Railway mostrerà finalmente l'errore completo.
+        logging.exception(
+            "ERRORE OPENROUTER con modello %s: %s",
+            MODEL,
+            error
+        )
 
     if not reply:
         reply = "Aspetta un secondo 😅 mi sono incartata."
 
-    else:
-        logging.info(
-            "Risposta generata con: %s",
-            used_model
-        )
-
-    # Salva SOLO la conversazione visibile,
-    # non eventuali risposte fallite.
+    # Memorizziamo ciò che Filippo ha scritto
+    # e ciò che effettivamente ha ricevuto.
     history[chat_id].append(
         ("user", text)
     )
@@ -653,7 +670,7 @@ def answer(chat_id, text):
 
 
 # =========================================================
-# TELEGRAM
+# TELEGRAM - /start
 # =========================================================
 
 @bot.message_handler(commands=["start"])
@@ -667,6 +684,10 @@ def start(message):
     )
 
 
+# =========================================================
+# TELEGRAM - /reset
+# =========================================================
+
 @bot.message_handler(commands=["reset"])
 def reset(message):
 
@@ -678,6 +699,10 @@ def reset(message):
     )
 
 
+# =========================================================
+# TELEGRAM - MESSAGGI
+# =========================================================
+
 @bot.message_handler(
     func=lambda message:
         bool(message.text)
@@ -687,6 +712,16 @@ def chat(message):
 
     try:
 
+        text = message.text.strip()
+
+        if not text:
+            return
+
+        logging.info(
+            "Messaggio Telegram ricevuto - chat_id=%s",
+            message.chat.id
+        )
+
         bot.send_chat_action(
             message.chat.id,
             "typing"
@@ -694,7 +729,7 @@ def chat(message):
 
         reply = answer(
             message.chat.id,
-            message.text.strip()
+            text
         )
 
         bot.send_message(
@@ -704,26 +739,40 @@ def chat(message):
 
     except Exception as error:
 
-        logging.exception(error)
-
-        bot.send_message(
-            message.chat.id,
-            "Aspetta un secondo 😅"
+        logging.exception(
+            "ERRORE TELEGRAM: %s",
+            error
         )
+
+        try:
+            bot.send_message(
+                message.chat.id,
+                "Aspetta un secondo 😅"
+            )
+        except Exception:
+            logging.exception(
+                "Impossibile inviare anche "
+                "il messaggio di errore Telegram"
+            )
 
 
 # =========================================================
-# START
+# AVVIO
 # =========================================================
 
 if __name__ == "__main__":
 
     logging.info(
-        "Samira avviata - DeepSeek + Qwen fallback"
+        "Samira avviata"
+    )
+
+    logging.info(
+        "Modello OpenRouter: %s",
+        MODEL
     )
 
     bot.infinity_polling(
         skip_pending=True,
         timeout=30,
         long_polling_timeout=30
-    )
+    ) 
