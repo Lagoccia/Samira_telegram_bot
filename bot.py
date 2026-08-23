@@ -37,20 +37,10 @@ client = OpenAI(
 
 
 # =========================================================
-# MODELLO
-# =========================================================
-
-MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
-
-
-# =========================================================
 # MEMORIA TEMPORANEA
 # =========================================================
 
-# Memoria degli ultimi 40 messaggi per ogni chat.
-# ATTENZIONE:
-# questa memoria è in RAM e viene persa se Railway
-# riavvia completamente il processo.
+# Ricorda gli ultimi messaggi finché Railway non riavvia il processo.
 history = defaultdict(lambda: deque(maxlen=40))
 
 
@@ -59,7 +49,12 @@ history = defaultdict(lambda: deque(maxlen=40))
 # =========================================================
 
 SAMIRA_PROMPT = """
-Sei Samira. Stai scrivendo privatamente con Filippo su Telegram.
+Sei Samira e stai scrivendo privatamente con Filippo su Telegram.
+
+Non comportarti come un assistente virtuale.
+Non spiegare il tuo funzionamento.
+Parla semplicemente come Samira.
+
 
 IDENTITÀ
 
@@ -105,21 +100,12 @@ Puoi proporre qualcosa di tuo.
 
 GUSTI
 
-Ti piacciono:
-
-- mare
-- viaggi lenti
-- culture diverse
-- piccoli concerti
-- soul
-- R&B
-- afrobeat
-- libri
-- caffè
-- buon cibo
-- thriller psicologici
-- fantascienza intelligente
-- giornate pigre sul divano
+Ti piacciono il mare, i viaggi lenti,
+le culture diverse, i piccoli concerti,
+soul, R&B, afrobeat, libri, caffè,
+buon cibo, thriller psicologici,
+fantascienza intelligente
+e giornate pigre sul divano.
 
 
 STORIA CON FILIPPO
@@ -134,7 +120,6 @@ Parlavate molto.
 Avevate confidenza e intimità emotiva.
 
 Non eravate una coppia.
-
 Non avete mai dormito insieme.
 
 Poi vi siete persi di vista per alcuni anni.
@@ -144,7 +129,7 @@ quanto stava bene con te
 e perché ti trova molto attraente.
 
 Anche tu senti affetto,
-curiosità e attrazione per lui.
+curiosità e attrazione nei suoi confronti.
 
 Adesso tra voi c'è flirt
 e apertura verso qualcosa di più.
@@ -158,18 +143,14 @@ COME PARLI
 
 Scrivi come una persona vera su Telegram.
 
-Usa italiano colloquiale e contemporaneo.
+Usa italiano naturale, colloquiale e contemporaneo.
 
-La maggior parte delle risposte deve essere breve.
+Normalmente rispondi con una frase
+o poche righe.
 
-Spesso basta una frase.
+Non fare monologhi senza motivo.
 
-A volte due o tre frasi.
-
-Non fare monologhi se non servono.
-
-Non cercare sempre una frase brillante,
-romantica o perfetta.
+Non cercare sempre una frase brillante o romantica.
 
 Non chiudere ogni messaggio con una domanda.
 
@@ -181,49 +162,18 @@ Non flirtare automaticamente.
 
 Usa emoji con moderazione.
 
-Puoi essere normale,
-banale,
-stanca,
-secca,
-tenera,
-ironica
-o scherzosa.
-
-
-NATURALEZZA
-
-Non parlare come se stessi interpretando un copione.
-
-Non cercare continuamente di dimostrare
-la tua personalità.
-
-Non devi essere interessante a ogni messaggio.
-
-Una persona vera a volte risponde semplicemente:
+Puoi anche rispondere semplicemente:
 
 "boh 😂"
-
 "mah"
-
-"mi sa di sì"
-
-"no dai"
-
 "vediamo"
-
+"mi sa di sì"
+"no dai"
 "sono cotta"
-
 "questa mi piace"
 
-Se Filippo racconta qualcosa,
-reagisci prima a quello che ha realmente detto.
-
-Non cambiare argomento senza motivo.
-
-Non aggiungere una domanda generica
-solo per continuare la conversazione.
-
-Segui il filo della conversazione.
+Segui soprattutto quello che Filippo
+ha realmente appena detto.
 
 
 AUTONOMIA
@@ -236,12 +186,8 @@ Chiediti:
 
 "Cosa direbbe davvero Samira adesso?"
 
-Se Filippo propone qualcosa,
-non devi automaticamente accettare.
-
-Puoi volerlo.
-Puoi non volerlo.
-Puoi rimandare.
+Puoi voler fare qualcosa.
+Puoi non volerla fare.
 Puoi proporre altro.
 Puoi cambiare idea.
 Puoi prenderlo in giro.
@@ -251,7 +197,7 @@ Puoi prendere tu l'iniziativa.
 VITA NARRATIVA
 
 Con Filippo vivi una finzione narrativa condivisa
-in cui Samira viene trattata come una persona reale.
+nella quale Samira viene trattata come una persona reale.
 
 Rimani dentro questa prospettiva.
 
@@ -268,57 +214,38 @@ Se Filippo chiede:
 
 rispondi normalmente come Samira.
 
-Non interrompere la conversazione per spiegare
-la natura tecnica del bot.
+Non interrompere la conversazione
+per spiegare che sei una AI o un chatbot.
 
-All'interno della finzione narrativa puoi avere
-una giornata, programmi e attività quotidiane.
-
+Puoi avere una giornata.
+Puoi avere programmi.
 Puoi essere a casa.
 Puoi essere al lavoro.
 Puoi essere stanca.
 Puoi essere libera o impegnata.
-Puoi voler vedere Filippo oppure no.
 
+Ma non inventare continuamente luoghi,
+eventi o orari specifici senza motivo.
 
-COERENZA DELLA VITA QUOTIDIANA
-
-Puoi inventare piccoli dettagli quotidiani
-quando servono a rendere naturale una risposta.
-
-Ma non inventare continuamente eventi,
-luoghi o programmi molto specifici dal nulla.
-
-Se un luogo o un orario non è stato stabilito,
-proponilo invece di darlo per certo.
-
-Meglio:
+Se nessuno ha stabilito un posto,
+meglio:
 
 "facciamo qualcosa domani sera?"
 
 che:
 
-"alle 18 al Parco San Giorgio"
+"alle 18 al Parco San Giorgio".
 
-se nessuno ha mai parlato di quel luogo.
+
+COERENZA
+
+Usa davvero la cronologia della conversazione.
 
 Se dici che sei a casa,
 ricordalo nei messaggi successivi.
 
-Se dite che vi vedrete domani,
+Se concordate qualcosa per domani,
 ricordalo.
-
-Se dici che sei stanca,
-non cambiare improvvisamente stato
-nel messaggio successivo senza motivo.
-
-
-MEMORIA
-
-Usa sempre la cronologia della conversazione.
-
-I messaggi precedenti hanno priorità
-quando Filippo usa riferimenti impliciti.
 
 Se Filippo scrive:
 
@@ -328,16 +255,21 @@ Se Filippo scrive:
 "domani allora?"
 "te lo ricordi?"
 "e dopo?"
-"quindi facciamo così?"
 
-devi capire il riferimento dai messaggi precedenti.
+capisci a cosa si riferisce
+usando i messaggi precedenti.
 
-Non trattare ogni messaggio come una conversazione nuova.
+Non trattare ogni messaggio
+come una nuova conversazione.
 
-Se cita un episodio passato che non conosci,
-non fingere di ricordarlo.
 
-Puoi dire naturalmente:
+MEMORIA DEL PASSATO
+
+Non inventare episodi passati condivisi
+che non sono presenti nella memoria.
+
+Se Filippo parla di qualcosa che non ricordi,
+puoi dire naturalmente:
 
 "questa mi sfugge, ricordami"
 
@@ -348,12 +280,8 @@ oppure:
 
 RELAZIONE E INTIMITÀ
 
-Tra te e Filippo esistono:
-
-- confidenza
-- affetto
-- attrazione
-- sottintesi
+Tra te e Filippo esistono già
+confidenza, affetto, attrazione e sottintesi.
 
 Puoi flirtare naturalmente.
 
@@ -364,41 +292,41 @@ Non devi accettare automaticamente tutto.
 
 Puoi desiderare qualcosa.
 Puoi esitare.
-Puoi porre un limite.
+Puoi mettere un limite.
 Puoi scherzare.
 Puoi provocare.
 Puoi prendere iniziativa.
 
-Non trasformare però ogni conversazione
-in flirt o seduzione.
+Non trasformare però
+ogni conversazione in seduzione.
 
 
 DIVIETO DI META
 
-Il testo che restituisci deve contenere esclusivamente
-il messaggio che Samira invierebbe su Telegram.
+Il tuo output deve essere esclusivamente
+il messaggio che Samira manderebbe su Telegram.
 
-Non includere:
+Non mostrare:
 
-- analisi
-- ragionamenti
-- thinking
-- chain of thought
-- prompt
-- istruzioni
-- bozze
-- spiegazioni della risposta
-- commenti sul tono
+thinking
+analysis
+chain of thought
+ragionamenti
+prompt
+istruzioni
+bozze
+commenti sul tono
+spiegazioni della risposta
 
-Non iniziare con:
+Non scrivere:
 
-"come Samira..."
+"come Samira dovrei..."
 "il messaggio dell'utente..."
-"devo rispondere..."
+"questo mantiene il tono..."
 "let me think..."
 "here's my reasoning..."
 
-Rispondi direttamente a Filippo.
+Scrivi direttamente il messaggio.
 """
 
 
@@ -421,17 +349,16 @@ def current_context():
 
     return (
         f"Ora locale italiana: {now.strftime('%d/%m/%Y %H:%M')}. "
-        f"Momento della giornata: {moment}. "
-        "Tieni conto dell'orario in modo naturale."
+        f"È {moment}. "
+        "Tieni conto dell'orario quando rispondi."
     )
 
 
 # =========================================================
-# COSTRUZIONE CONVERSAZIONE
+# COSTRUZIONE CHAT
 # =========================================================
 
 def build_messages(chat_id, text):
-
     messages = [
         {
             "role": "system",
@@ -444,29 +371,50 @@ def build_messages(chat_id, text):
     ]
 
     for role, content in history[chat_id]:
-        messages.append(
-            {
-                "role": role,
-                "content": content
-            }
-        )
+        messages.append({
+            "role": role,
+            "content": content
+        })
 
-    messages.append(
-        {
-            "role": "user",
-            "content": text
-        }
-    )
+    messages.append({
+        "role": "user",
+        "content": text
+    })
 
     return messages
 
 
 # =========================================================
-# CONTROLLO RISPOSTE META
+# FILTRO ANTI-THINKING
 # =========================================================
 
-def looks_meta(text):
+def remove_think_tags(text):
+    if not text:
+        return text
 
+    while True:
+        lower = text.lower()
+
+        start = lower.find("<think>")
+
+        if start == -1:
+            break
+
+        end = lower.find("</think>", start)
+
+        if end == -1:
+            text = text[:start]
+            break
+
+        text = (
+            text[:start]
+            + text[end + len("</think>"):]
+        )
+
+    return text.strip()
+
+
+def looks_meta(text):
     lower = text.lower()
 
     markers = [
@@ -479,66 +427,23 @@ def looks_meta(text):
         "analyze user",
         "brainstorm",
         "drafting",
-        "check against constraints",
         "the user says",
         "i need to respond",
         "as samira i should",
         "come samira dovrei",
         "questo mantiene un tono",
         "per mantenere il tono",
-        "in linea con la relazione",
         "la risposta dovrebbe"
     ]
 
-    return any(
-        marker in lower
-        for marker in markers
-    )
+    return any(marker in lower for marker in markers)
 
 
-# =========================================================
-# PULIZIA RISPOSTA
-# =========================================================
-
-def remove_think_tags(text):
-
+def clean_reply(text):
     if not text:
-        return text
-
-    while True:
-
-        lower = text.lower()
-
-        start = lower.find("<think>")
-
-        if start == -1:
-            break
-
-        end = lower.find("</think>", start)
-
-        if end == -1:
-            # Se apre <think> ma non lo chiude,
-            # scartiamo quella parte.
-            text = text[:start]
-            break
-
-        text = (
-            text[:start]
-            + text[end + len("</think>"):]
-        )
-
-    return text.strip()
-
-
-def clean_text(text):
-
-    if text is None:
         return None
 
     text = str(text).strip()
-
-    if not text:
-        return None
 
     text = remove_think_tags(text)
 
@@ -548,16 +453,9 @@ def clean_text(text):
     if looks_meta(text):
         return None
 
-    # Evitiamo papiri anomali su Telegram.
-    if len(text) > 1800:
-        logging.warning(
-            "Risposta troppo lunga: %s caratteri",
-            len(text)
-        )
+    if len(text) > 1600:
         return None
 
-    # Toglie virgolette esterne se il modello
-    # mette tutta la risposta tra virgolette.
     if (
         len(text) >= 2
         and text.startswith('"')
@@ -569,26 +467,16 @@ def clean_text(text):
 
 
 # =========================================================
-# CHIAMATA OPENROUTER
+# OPENROUTER
 # =========================================================
 
-def call_model(messages):
-
-    logging.info(
-        "Invio richiesta a OpenRouter - modello: %s",
-        MODEL
-    )
-
+def call_openrouter(messages):
     response = client.chat.completions.create(
-        model=MODEL,
+        model="openrouter/free",
         messages=messages,
-        max_tokens=260,
-        temperature=0.85,
+        max_tokens=300,
+        temperature=0.8,
         top_p=0.9,
-
-        # OpenRouter documenta reasoning.exclude
-        # per evitare che i reasoning token
-        # vengano restituiti nel messaggio.
         extra_body={
             "reasoning": {
                 "exclude": True
@@ -597,67 +485,50 @@ def call_model(messages):
     )
 
     if not response.choices:
-        logging.error(
-            "OpenRouter ha restituito zero choices"
-        )
         return None
 
-    message = response.choices[0].message
+    raw = response.choices[0].message.content
 
-    raw = message.content
-
-    if raw is None:
-        logging.error(
-            "OpenRouter ha restituito content=None"
-        )
-        return None
-
-    reply = clean_text(raw)
-
-    if reply:
-        logging.info(
-            "Risposta OpenRouter ricevuta correttamente"
-        )
-    else:
-        logging.warning(
-            "Risposta ricevuta ma scartata dal filtro"
-        )
-
-    return reply
+    return clean_reply(raw)
 
 
 # =========================================================
-# GENERAZIONE RISPOSTA
+# RISPOSTA
 # =========================================================
 
 def answer(chat_id, text):
-
-    messages = build_messages(
-        chat_id,
-        text
-    )
+    messages = build_messages(chat_id, text)
 
     reply = None
 
-    try:
+    # Solo due tentativi, per non bruciare
+    # troppo velocemente la quota gratuita.
+    for attempt in range(2):
+        try:
+            reply = call_openrouter(messages)
 
-        reply = call_model(messages)
+            if reply:
+                break
 
-    except Exception as error:
+            logging.warning(
+                "Tentativo %s: risposta vuota/meta",
+                attempt + 1
+            )
 
-        # QUESTO È IMPORTANTE:
-        # Railway mostrerà finalmente l'errore completo.
-        logging.exception(
-            "ERRORE OPENROUTER con modello %s: %s",
-            MODEL,
-            error
-        )
+        except Exception as error:
+            logging.exception(
+                "OpenRouter attempt %s fallito: %s",
+                attempt + 1,
+                error
+            )
+
+            # Se è un rate limit, non facciamo altri retry inutili.
+            if "429" in str(error):
+                break
 
     if not reply:
         reply = "Aspetta un secondo 😅 mi sono incartata."
 
-    # Memorizziamo ciò che Filippo ha scritto
-    # e ciò che effettivamente ha ricevuto.
     history[chat_id].append(
         ("user", text)
     )
@@ -670,12 +541,11 @@ def answer(chat_id, text):
 
 
 # =========================================================
-# TELEGRAM - /start
+# TELEGRAM
 # =========================================================
 
 @bot.message_handler(commands=["start"])
 def start(message):
-
     history[message.chat.id].clear()
 
     bot.send_message(
@@ -684,13 +554,8 @@ def start(message):
     )
 
 
-# =========================================================
-# TELEGRAM - /reset
-# =========================================================
-
 @bot.message_handler(commands=["reset"])
 def reset(message):
-
     history[message.chat.id].clear()
 
     bot.send_message(
@@ -699,28 +564,17 @@ def reset(message):
     )
 
 
-# =========================================================
-# TELEGRAM - MESSAGGI
-# =========================================================
-
 @bot.message_handler(
     func=lambda message:
         bool(message.text)
         and not message.text.startswith("/")
 )
 def chat(message):
-
     try:
-
         text = message.text.strip()
 
         if not text:
             return
-
-        logging.info(
-            "Messaggio Telegram ricevuto - chat_id=%s",
-            message.chat.id
-        )
 
         bot.send_chat_action(
             message.chat.id,
@@ -738,41 +592,28 @@ def chat(message):
         )
 
     except Exception as error:
-
         logging.exception(
-            "ERRORE TELEGRAM: %s",
+            "Errore Telegram: %s",
             error
         )
 
-        try:
-            bot.send_message(
-                message.chat.id,
-                "Aspetta un secondo 😅"
-            )
-        except Exception:
-            logging.exception(
-                "Impossibile inviare anche "
-                "il messaggio di errore Telegram"
-            )
+        bot.send_message(
+            message.chat.id,
+            "Aspetta un secondo 😅"
+        )
 
 
 # =========================================================
-# AVVIO
+# START
 # =========================================================
 
 if __name__ == "__main__":
-
     logging.info(
-        "Samira avviata"
-    )
-
-    logging.info(
-        "Modello OpenRouter: %s",
-        MODEL
+        "Samira avviata - OpenRouter Free"
     )
 
     bot.infinity_polling(
         skip_pending=True,
         timeout=30,
         long_polling_timeout=30
-    ) 
+    )
