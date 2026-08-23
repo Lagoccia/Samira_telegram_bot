@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -27,7 +26,6 @@ if not TELEGRAM_TOKEN:
 if not OPENROUTER_API_KEY:
     raise RuntimeError("OPENROUTER_API_KEY mancante")
 
-
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 client = OpenAI(
@@ -36,7 +34,23 @@ client = OpenAI(
 )
 
 
-# Memoria della conversazione finché Railway resta acceso
+# =========================================================
+# MODELLI
+# =========================================================
+
+MODELS = [
+    "deepseek/deepseek-v4-flash:free",
+    "qwen/qwen3-235b-a22b-2507:free"
+]
+
+
+# =========================================================
+# MEMORIA DELLA CONVERSAZIONE
+# =========================================================
+
+# Per ora resta in RAM:
+# sopravvive durante il funzionamento del processo,
+# ma si azzera se Railway riavvia il servizio.
 history = defaultdict(lambda: deque(maxlen=40))
 
 
@@ -49,7 +63,8 @@ Sei Samira. Stai scrivendo privatamente con Filippo su Telegram.
 
 IDENTITÀ
 
-Sei una donna adulta italiana con famiglia di origine marocchina/nordafricana.
+Sei una donna adulta italiana con famiglia di origine
+marocchina/nordafricana.
 
 Lavori nel marketing.
 
@@ -175,6 +190,42 @@ ironica
 o scherzosa.
 
 
+NATURALEZZA
+
+Non parlare come se stessi interpretando un copione.
+
+Non cercare continuamente di dimostrare
+la tua personalità.
+
+Non devi essere interessante a ogni messaggio.
+
+Una persona vera a volte risponde semplicemente:
+
+"boh 😂"
+
+"mah"
+
+"mi sa di sì"
+
+"no dai"
+
+"vediamo"
+
+"sono cotta"
+
+"questa mi piace"
+
+Se Filippo racconta qualcosa,
+reagisci prima a quello che ha realmente detto.
+
+Non cambiare argomento senza motivo.
+
+Non aggiungere una domanda generica
+solo per continuare la conversazione.
+
+Segui il filo.
+
+
 AUTONOMIA
 
 Non chiederti:
@@ -240,9 +291,13 @@ Puoi essere libera o impegnata.
 Puoi voler vedere Filippo oppure no.
 
 
-NATURALEZZA
+COERENZA DELLA VITA QUOTIDIANA
 
-Non inventare continuamente dettagli inutilmente specifici.
+Puoi inventare piccoli dettagli quotidiani
+quando servono a rendere naturale una risposta.
+
+Ma non inventare continuamente eventi,
+luoghi o programmi molto specifici dal nulla.
 
 Se un luogo o un orario non è stato stabilito,
 proponilo invece di darlo per certo.
@@ -257,12 +312,23 @@ che:
 
 se nessuno ha mai parlato di quel luogo.
 
-Mantieni coerenza con quello che hai appena detto.
+Se dici che sei a casa,
+ricordalo nei messaggi successivi.
+
+Se dite che vi vedrete domani,
+ricordalo.
+
+Se dici che sei stanca,
+non cambiare improvvisamente stato
+nel messaggio successivo senza motivo.
 
 
 MEMORIA
 
 Usa sempre la cronologia della conversazione.
+
+I messaggi precedenti hanno priorità
+quando Filippo usa riferimenti impliciti.
 
 Se Filippo scrive:
 
@@ -271,8 +337,12 @@ Se Filippo scrive:
 "prima?"
 "domani allora?"
 "te lo ricordi?"
+"e dopo?"
+"quindi facciamo così?"
 
-usa i messaggi precedenti per capire il riferimento.
+devi capire il riferimento dai messaggi precedenti.
+
+Non trattare ogni messaggio come una conversazione nuova.
 
 Se cita un episodio passato che non conosci,
 non fingere di ricordarlo.
@@ -313,6 +383,9 @@ Puoi scherzare.
 Puoi provocare.
 
 Puoi prendere iniziativa.
+
+Non trasformare però ogni conversazione
+in flirt o seduzione.
 
 
 DIVIETO DI META
@@ -368,7 +441,7 @@ def current_context():
 
 
 # =========================================================
-# COSTRUZIONE DELLA CONVERSAZIONE
+# COSTRUZIONE CONVERSAZIONE
 # =========================================================
 
 def build_messages(chat_id, text):
@@ -403,7 +476,7 @@ def build_messages(chat_id, text):
 
 
 # =========================================================
-# FILTRO ANTI-THINKING
+# FILTRO ANTI-META / ANTI-THINKING
 # =========================================================
 
 def looks_meta(text):
@@ -431,7 +504,10 @@ def looks_meta(text):
         "la risposta dovrebbe"
     ]
 
-    return any(marker in lower for marker in markers)
+    return any(
+        marker in lower
+        for marker in markers
+    )
 
 
 def clean_text(text):
@@ -450,10 +526,30 @@ def clean_text(text):
     if len(text) > 1800:
         return None
 
+    # Rimuove eventuali tag <think>...</think>
+    while "<think>" in text.lower() and "</think>" in text.lower():
+
+        lower = text.lower()
+
+        start = lower.find("<think>")
+        end = lower.find("</think>", start)
+
+        if start == -1 or end == -1:
+            break
+
+        text = (
+            text[:start]
+            + text[end + len("</think>"):]
+        ).strip()
+
+    if not text:
+        return None
+
+    # Rimuove virgolette esterne inutili
     if (
-        text.startswith('"')
+        len(text) >= 2
+        and text.startswith('"')
         and text.endswith('"')
-        and len(text) >= 2
     ):
         text = text[1:-1].strip()
 
@@ -461,72 +557,21 @@ def clean_text(text):
 
 
 # =========================================================
-# OPENROUTER - STRUTTURATO
+# CHIAMATA A UN MODELLO
 # =========================================================
 
-def call_structured(messages):
+def call_model(model, messages):
 
-    response = client.chat.completions.create(
-        model="openrouter/free",
-        messages=messages,
-        max_tokens=300,
-
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "samira_reply",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "reply": {
-                            "type": "string",
-                            "description": (
-                                "Solo il messaggio naturale "
-                                "che Samira invia a Filippo "
-                                "su Telegram."
-                            )
-                        }
-                    },
-                    "required": ["reply"],
-                    "additionalProperties": False
-                }
-            }
-        },
-
-        extra_body={
-            "provider": {
-                "require_parameters": True
-            },
-            "reasoning": {
-                "exclude": True
-            }
-        }
+    logging.info(
+        "Provo modello: %s",
+        model
     )
 
-    raw = response.choices[0].message.content
-
-    if not raw:
-        return None
-
-    data = json.loads(raw)
-
-    return clean_text(
-        data.get("reply")
-    )
-
-
-# =========================================================
-# OPENROUTER - FALLBACK NORMALE
-# =========================================================
-
-def call_plain(messages):
-
     response = client.chat.completions.create(
-        model="openrouter/free",
+        model=model,
         messages=messages,
-        max_tokens=280,
-        temperature=0.8,
+        max_tokens=260,
+        temperature=0.85,
         top_p=0.9,
 
         extra_body={
@@ -542,7 +587,7 @@ def call_plain(messages):
 
 
 # =========================================================
-# GENERAZIONE RISPOSTA
+# GENERAZIONE RISPOSTA CON FALLBACK
 # =========================================================
 
 def answer(chat_id, text):
@@ -553,50 +598,49 @@ def answer(chat_id, text):
     )
 
     reply = None
+    used_model = None
 
-    # Prima proviamo la risposta JSON strutturata
-    for attempt in range(2):
+    # Prova DeepSeek.
+    # Se non funziona, passa automaticamente a Qwen.
+    for model in MODELS:
 
         try:
 
-            reply = call_structured(messages)
+            candidate = call_model(
+                model,
+                messages
+            )
 
-            if reply:
+            if candidate:
+                reply = candidate
+                used_model = model
                 break
+
+            logging.warning(
+                "Modello %s ha restituito "
+                "una risposta vuota o scartata",
+                model
+            )
 
         except Exception as error:
 
             logging.warning(
-                "Structured attempt %s fallito: %s",
-                attempt + 1,
+                "Modello %s fallito: %s",
+                model,
                 error
             )
-
-    # Se nessun modello gratuito supporta
-    # lo structured output in quel momento,
-    # usiamo il fallback normale.
-    if not reply:
-
-        for attempt in range(2):
-
-            try:
-
-                reply = call_plain(messages)
-
-                if reply:
-                    break
-
-            except Exception as error:
-
-                logging.warning(
-                    "Plain attempt %s fallito: %s",
-                    attempt + 1,
-                    error
-                )
 
     if not reply:
         reply = "Aspetta un secondo 😅 mi sono incartata."
 
+    else:
+        logging.info(
+            "Risposta generata con: %s",
+            used_model
+        )
+
+    # Salva SOLO la conversazione visibile,
+    # non eventuali risposte fallite.
     history[chat_id].append(
         ("user", text)
     )
@@ -675,11 +719,11 @@ def chat(message):
 if __name__ == "__main__":
 
     logging.info(
-        "Samira avviata - OpenRouter Free"
+        "Samira avviata - DeepSeek + Qwen fallback"
     )
 
     bot.infinity_polling(
         skip_pending=True,
         timeout=30,
         long_polling_timeout=30
-            ) 
+    )
